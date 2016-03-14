@@ -14,28 +14,10 @@ public class Marshaller
     public static final int IntArrayType = 2;
     public static final int ByteType = 3;
 
-
-
-    private List<byte[]> _chunks;
-    private byte[] _currentChunk;
-    private int _currentChunkPosition = 0;
-    public final int chunkSize;
-
-
     private byte[] _bytes;
-
-    public Marshaller(int chunkByteSize)
-    {
-        chunkSize = chunkByteSize;
-
-        _chunks = new LinkedList<>();
-        _currentChunk = new byte[chunkSize];
-    }
 
     public Marshaller(MarshalledObject[] values)
     {
-        chunkSize = 0;
-
         int totalSize = 0;
         int position = 0;
 
@@ -98,65 +80,6 @@ public class Marshaller
         return _bytes;
     }
 
-    // value includes the 1 byte type tag
-    public void chunkable(byte[] value, int fromPos)
-    {
-        if(_currentChunkPosition + value.length - fromPos > chunkSize)
-        {
-            int spillOver = _currentChunkPosition + value.length - chunkSize - fromPos;
-            int remainingSpace = chunkSize - _currentChunkPosition;
-
-            // copies to the remainders of the current trunk
-            System.arraycopy(value, fromPos, _currentChunk, _currentChunkPosition, remainingSpace);
-
-            _chunks.add(_currentChunk);
-
-            // reset
-            _currentChunkPosition = 0;
-            _currentChunk = new byte[chunkSize];
-
-            chunkable(value, remainingSpace);
-        }
-        else
-        {
-            //
-
-            System.arraycopy(value, fromPos, _currentChunk, _currentChunkPosition, value.length - fromPos);
-            _currentChunkPosition += value.length - fromPos;
-        }
-    }
-
-    public List getChunks()
-    {
-        if(_currentChunkPosition > 0)
-        {
-            _chunks.add(_currentChunk);
-
-            _currentChunkPosition = 0;
-            _currentChunk = new byte[chunkSize];
-        }
-
-        return _chunks;
-    }
-
-    public void appendInt(byte[] integer)
-    {
-        byte[] intBytes = new byte[5];
-        intBytes[0] = Marshaller.IntegerType;
-        System.arraycopy(integer, 0, intBytes, 1, integer.length);
-
-        chunkable(intBytes, 0);
-    }
-
-    public void appendString(byte[] str)
-    {
-        byte[] strBytes = new byte[str.length + 2];
-        strBytes[0] = Marshaller.StringType;
-        strBytes[1] = str.length > 255 ? 0 : (byte)str.length;
-        System.arraycopy(str, 0, strBytes, 1, str.length);
-
-        chunkable(strBytes, 0);
-    }
 
 
     /**
@@ -191,14 +114,6 @@ public class Marshaller
         }
 
         return new MarshalledObject(Marshaller.StringType, output);
-
-
-//        byte[] output = new byte[stringBytes.length + 1];
-//        output[0] = Marshaller.StringType;
-//
-//        System.arraycopy(stringBytes, 0, output, 1, stringBytes.length);
-//
-//        return output;
     }
 
     public static String unMarshallString(byte[] value)
