@@ -2,6 +2,9 @@ package com.CZ4013.server;
 
 import java.awt.image.ImagingOpException;
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -14,12 +17,17 @@ public class FileServer
 {
 
     /**
+     *
+     * ## Thoughts on design ##
+     *
      * We can handle multiple users by getting the ip address and port number of every packet, and put it into a list in a hashtable.
      *
      * A data array which stores the incomplete data received so far for a certain client
      * A status array indicating what actions should be taken on the next packet received for that client
      * Once all data has been received clear the hashtable and do stuff with it
      *
+     *
+     *  We may need to keep hash table of files that are currently being accessed, to lock them.
      */
 
     final HashMap<String, LinkedList<String>> monitoringSet = new HashMap<>();
@@ -31,7 +39,18 @@ public class FileServer
 
     }
 
-    // We may need to keep hash table of files that are currently being accessed, to lock them.
+
+    // An idempotent operation
+    public void deleteFile(String pathname) throws IOException
+    {
+        if(!new File(pathname).delete())
+            throw new IOException("Cannot delete file. Make sure file not in use");
+    }
+
+    public void duplicateFile(String pathname) throws IOException
+    {
+        Files.copy(new File(pathname).toPath(), new File(pathname + "_copy").toPath());
+    }
 
     private byte[] readFile(String pathname, int offset, int length) throws IOException
     {
@@ -43,6 +62,7 @@ public class FileServer
 
     public void monitorFile(String pathname, int monitorLength, String monitorTarget)
     {
+        // Adds the monitoring of the file
         synchronized (monitoringSet)
         {
             if(monitoringSet.get(pathname) == null)
@@ -52,6 +72,7 @@ public class FileServer
             monitoringSet.get(pathname).add(monitorTarget);
         }
 
+        // Create a new thread which removes the monitoring after the interval
         new Thread(() -> {
             try
             {
@@ -76,6 +97,7 @@ public class FileServer
 
     public void insertFile(String pathname, int offset, byte[] data) throws IOException
     {
+
         String randomName = Double.toHexString(Math.random());
 
         File origFile = new File(pathname);
@@ -89,6 +111,18 @@ public class FileServer
             bo.write(bi.read());
         }
 
+//        try {
+//            byte[] buf = new byte[1024];
+//            int totalBytes = 0;
+//            int bytesRead;
+//            while ((bytesRead = bi.read(buf)) > 0) {
+//                totalBytes += bytesRead;
+//                bo.write(buf, 0, (totalBytes > offset) ? offset % 1024 : bytesRead);
+//            }
+//        } finally {
+//        }
+
+
         bo.write(data);
 
         int read;
@@ -97,11 +131,11 @@ public class FileServer
             bo.write(read);
         }
 
-        bi.close();
-        bo.close();
+        bi.close(); bo.close();
 
-        origFile.delete();
-        tempFile.renameTo(origFile);
+
+        if(!(origFile.delete() && tempFile.renameTo(origFile)))
+            throw new IOException("Cannot delete original file or rename temporary file. Possibly due to original file still in use");
 
         if(monitoringSet.get(pathname) != null)
         {
