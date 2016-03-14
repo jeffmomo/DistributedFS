@@ -26,6 +26,7 @@ public class FileServer
      * A status array indicating what actions should be taken on the next packet received for that client
      * Once all data has been received clear the hashtable and do stuff with it
      *
+     * Path normalisation?? How do we handle it. Do we need to handle it?
      *
      *  We may need to keep hash table of files that are currently being accessed, to lock them.
      */
@@ -41,15 +42,18 @@ public class FileServer
 
 
     // An idempotent operation
-    public void deleteFile(String pathname) throws IOException
+    public boolean deleteFile(String pathname)
     {
-        if(!new File(pathname).delete())
-            throw new IOException("Cannot delete file. Make sure file not in use");
+        return new File(pathname).delete();
     }
 
-    public void duplicateFile(String pathname) throws IOException
+    // A non-idempotent operation
+    public String duplicateFile(String pathname) throws IOException
     {
-        Files.copy(new File(pathname).toPath(), new File(pathname + "_copy").toPath());
+        File dupFile = new File(pathname + "_" + Double.toHexString(Math.random()));
+        Files.copy(new File(pathname).toPath(), dupFile.toPath());
+
+        return dupFile.getPath();
     }
 
     private byte[] readFile(String pathname, int offset, int length) throws IOException
