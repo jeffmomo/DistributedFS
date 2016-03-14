@@ -11,31 +11,35 @@ public class Main {
     public static void main(String[] args) throws Exception {
 
 
-//        System.out.println(Marshaller.unMarshallInt(Marshaller.marshalInt(Integer.MAX_VALUE)));
-//
-//        System.out.println(Marshaller.unMarshallString(Marshaller.marshalString("bob lu")));
-//
-//        System.out.println(arrToStr(Marshaller.unMarshallIntArray(Marshaller.marshalIntArray(new int[]{1,2,3,4,5}))));
-//
-//        Marshaller m = new Marshaller(8);
-//        m.appendString("bob lu is a loser".getBytes(StandardCharsets.UTF_16));
-//
-//        m.getChunks();
-        // write your code here
+        // To marshal variables into bytes, we use the Marshaller.
+        // Provide to the marshaller an array of MarshalledObjects
+        Marshaller m = new Marshaller(
+                new MarshalledObject[]
+                {
+                        Marshaller.marshalInt(5),
+                        Marshaller.marshalString("jello"),
+                        Marshaller.marshalInt(-1),
+                        Marshaller.marshalInt(Integer.MAX_VALUE),
+                        Marshaller.marshalIntArray(new int[]{-1,0,1})
+                });
 
-        Marshaller m = new Marshaller(new MarshalledObject[]{Marshaller.marshalInt(5), Marshaller.marshalString("jello"), Marshaller.marshalInt(-1), Marshaller.marshalInt(Integer.MAX_VALUE), Marshaller.marshalIntArray(new int[]{-1,0,1})});
+        // This gets the marshalled bytes which is ready for transfer
+        byte[] marshalledBytes = m.getBytes();
 
-        UnMarshaller um = new UnMarshaller(m.getBytes());
+        // To unmarshall construct a new Unmarshaller on the bytes
+        UnMarshaller um = new UnMarshaller(marshalledBytes);
 
+        // Use the getNext function and a cast to get the parameters
+        // Note that getNext() returns null if there are no more parameters
+        // Exceptions may be thrown if the bytes are not well formed
         int i = (Integer) um.getNext();
         String j = (String) um.getNext();
         int neg = (Integer) um.getNext();
         int max = (Integer) um.getNext();
         int[] arr = (int[]) um.getNext();
-//        String arsr = arrToStr(arr);
+        Object n = um.getNext();
 
         int z = 0;
-
     }
 
     static String arrToStr(int[] arr)

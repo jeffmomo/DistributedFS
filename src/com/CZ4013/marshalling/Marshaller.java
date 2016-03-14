@@ -3,8 +3,6 @@ package com.CZ4013.marshalling;
 
 import javax.naming.SizeLimitExceededException;
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedList;
-import java.util.List;
 
 public class Marshaller
 {
@@ -16,6 +14,10 @@ public class Marshaller
 
     private byte[] _bytes;
 
+    /**
+     * Takes in an array of MarshalledObjects and converts it into an internal byte array. These MarshalledObjects can be obtained from the static functions on the Marshaller
+     * @param values An array of marshalled objects
+     */
     public Marshaller(MarshalledObject[] values)
     {
         int totalSize = 0;
@@ -75,16 +77,20 @@ public class Marshaller
         }
     }
 
+    /**
+     * Returns the marshalled byte array
+     * @return
+     */
     public byte[] getBytes()
     {
         return _bytes;
     }
 
 
-
     /**
-     * Format: (4_bit_type, 32_bit_value)
-     * Most significant byte is closest to the 0 index of the byte array
+     *
+     * @param value
+     * @return Returns a MarshalledObject representing the int
      */
     public static MarshalledObject marshalInt(int value)
     {
