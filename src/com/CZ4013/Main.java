@@ -3,6 +3,7 @@ package com.CZ4013;
 import com.CZ4013.marshalling.MarshalledObject;
 import com.CZ4013.marshalling.Marshaller;
 import com.CZ4013.marshalling.UnMarshaller;
+import com.CZ4013.server.FileServer;
 
 import java.nio.charset.StandardCharsets;
 
@@ -38,6 +39,13 @@ public class Main {
         int max = (Integer) um.getNext();
         int[] arr = (int[]) um.getNext();
         Object n = um.getNext();
+
+        FileServer fs = new FileServer();
+
+        fs.monitorFile("test", 100, "bob");
+        fs.insertFile("test", 1, "b".getBytes());
+        Thread.sleep(500);
+        fs.insertFile("test", 1, "b".getBytes());
 
         int z = 0;
     }
