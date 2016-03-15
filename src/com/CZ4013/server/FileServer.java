@@ -274,7 +274,7 @@ public class FileServer
 
     private void sendUpdates(AddressPort target, String pathname, byte[] updates, int offset)
     {
-        log("To target " + "T E S T" + ", file " + pathname + " has been updated at " + offset + ": " + new String(updates), 1);
+        log("To target " + "T E S T" + ", file " + pathname + " has been updated at " + offset + ": " + new String(updates), 2);
     }
 
     private void sendBytes(byte[] bytes, InetAddress address, int port) throws SizeLimitExceededException

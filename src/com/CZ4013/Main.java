@@ -41,6 +41,7 @@ public class Main {
 
         FileServer fs = new FileServer();
 
+        // An arbitrary packet used for testing purposes
         DatagramPacket testPkt = new DatagramPacket(new byte[5], 0, InetAddress.getByName("127.0.0.1"), 0);
 
         fs.processQuery(testPkt, new Marshaller((byte) QueryType.MONITOR_FILE, "test", 100).getBytes());
@@ -53,6 +54,8 @@ public class Main {
 
         //System.out.println(new String(fs.readFile("test", 0, -1), StandardCharsets.UTF_8));
 
+        fs.processQuery(testPkt, new Marshaller((byte) QueryType.INSERT_FILE, "test", 1, "b".getBytes()).getBytes());
+        Thread.sleep(50);
         fs.processQuery(testPkt, new Marshaller((byte) QueryType.INSERT_FILE, "test", 1, "b".getBytes()).getBytes());
         Thread.sleep(500);
         fs.processQuery(testPkt, new Marshaller((byte) QueryType.INSERT_FILE, "test", 1, "b".getBytes()).getBytes());
