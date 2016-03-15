@@ -47,6 +47,15 @@ public class UnMarshaller
                     _position += stringLen;
 
                     return new String(stringData, StandardCharsets.UTF_16);
+                case Marshaller.ByteArrayType:
+                    int byteLen = (_bytes[_position++] << 8) & 0x0000FF00 | (_bytes[_position++]) & 0xFF;
+
+                    byte[] bytes = new byte[byteLen];
+                    System.arraycopy(_bytes, _position, bytes, 0, byteLen);
+
+                    _position += byteLen;
+                    return bytes;
+
                 case Marshaller.IntArrayType:
 
                     int len = ((_bytes[_position++] << 8) & 0x0000FF00 | (_bytes[_position++]) & 0xFF) / 4;
@@ -67,5 +76,15 @@ public class UnMarshaller
         }
 
         throw new Exception("Byte array is not well formed");
+    }
+
+    public byte getNextByte() throws Exception
+    {
+        if(_position + 1 >= _bytes.length)
+        {
+            throw new Exception("Byte buffer length exceeded");
+        }
+
+        return _bytes[_position++];
     }
 }

@@ -1,20 +1,28 @@
 package com.CZ4013.server;
 
-import java.awt.image.ImagingOpException;
+import com.CZ4013.marshalling.UnMarshaller;
+
+import javax.naming.SizeLimitExceededException;
 import java.io.*;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
+import java.net.DatagramPacket;
+import java.net.InetAddress;
 import java.nio.file.Files;
 import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.concurrent.Exchanger;
+import java.util.HashSet;
+
+
+
 
 /**
  *
  */
 public class FileServer
 {
+
+
+    public static final int MAX_PACKET_BYTES = 600000;
+
+    public static final int DEBUG_MASK = 2;
 
     /**
      *
@@ -31,20 +39,126 @@ public class FileServer
      *  We may need to keep hash table of files that are currently being accessed, to lock them.
      */
 
-    final HashMap<String, LinkedList<String>> monitoringSet = new HashMap<>();
-
-
+    final HashMap<String, HashSet<AddressPort>> monitoringMap = new HashMap<>();
 
     public FileServer()
     {
 
     }
 
+    public void processQuery(DatagramPacket packet, byte[] query) throws Exception
+    {
+        UnMarshaller um = new UnMarshaller(query);
+
+        int queryType = (int) um.getNextByte();
+        InetAddress address = packet.getAddress();
+        int port = packet.getPort();
+
+        switch (queryType)
+        {
+            case QueryType.READ_FILE:
+            {
+                String path = (String) um.getNext();
+                int offset = (Integer) um.getNext();
+                int length = (Integer) um.getNext();
+
+                try
+                {
+                    byte[] content = readFile(path, offset, length);
+                    respond(packet, content);
+                } catch (IOException e)
+                {
+                    respond(packet, "Error in reading file");
+                }
+                break;
+            }
+            case QueryType.INSERT_FILE:
+            {
+                String path = (String) um.getNext();
+                int offset = (Integer) um.getNext();
+                byte[] bytes = (byte[]) um.getNext();
+
+                try
+                {
+                    insertFile(path, offset, bytes);
+                    respond(packet, "Success: Bytes inserted");
+                }
+                catch(Exception e)
+                {
+                    respond(packet, "Error in file insertion");
+                }
+                break;
+            }
+            case QueryType.MONITOR_FILE:
+            {
+                String path = (String) um.getNext();
+                int monitorLength = (Integer) um.getNext();
+
+                try
+                {
+                    monitorFile(path, monitorLength, new AddressPort(packet));
+                    respond(packet, "Success: File monitored");
+                } catch (Exception e)
+                {
+                    respond(packet, "Error in monitoring file");
+                }
+
+                break;
+            }
+            case QueryType.DELETE_FILE:
+            {
+                String path = (String) um.getNext();
+
+                try
+                {
+                    if(deleteFile(path))
+                        respond(packet, "Success: File deleted");
+                    else
+                        respond(packet, "Failure: File cannot be deleted");
+                }
+                catch (Exception e)
+                {
+                    respond(packet, "Error in deleting file");
+                }
+                break;
+            }
+            case QueryType.DUPLICATE_FILE:
+            {
+                String path = (String) um.getNext();
+
+                try
+                {
+                    String filename = duplicateFile(path);
+                    respond(packet, "Success: File duplicated, new file name is: '" + filename + "'");
+                }
+                catch (Exception e)
+                {
+                    respond(packet, "Error: Did not duplicate file");
+                }
+                break;
+            }
+        }
+    }
+
+    private void respond(DatagramPacket queryPkt, String message)
+    {
+        log("response to client TEST: " + message, 2);
+    }
+
+    private void respond(DatagramPacket queryPkt, byte[] bytes)
+    {
+        log("bytes to client test: length = " + bytes.length, 2);
+    }
+
 
     // An idempotent operation
     public boolean deleteFile(String pathname)
     {
-        return new File(pathname).delete();
+        boolean success = new File(pathname).delete();
+
+        log("File " + pathname + " is deleted", 1);
+
+        return success;
     }
 
     // A non-idempotent operation
@@ -53,27 +167,37 @@ public class FileServer
         File dupFile = new File(pathname + "_" + Double.toHexString(Math.random()));
         Files.copy(new File(pathname).toPath(), dupFile.toPath());
 
+        log("File " + pathname + " is duplicated as '" + dupFile.getPath() + "'", 1);
+
         return dupFile.getPath();
     }
 
-    private byte[] readFile(String pathname, int offset, int length) throws IOException
+    public byte[] readFile(String pathname, int offset, int length) throws IOException
     {
+        if(length == -1)
+            length = (int) new File(pathname).length();
+
         byte[] buffer = new byte[length];
-        new BufferedInputStream(new FileInputStream(pathname)).read(buffer, offset, length);
+
+        BufferedInputStream inputStream = new BufferedInputStream(new FileInputStream(pathname));
+        inputStream.read(buffer, offset, length);
+        inputStream.close();
+
+        log("File " + pathname + " has been read", 1);
 
         return buffer;
     }
 
-    public void monitorFile(String pathname, int monitorLength, String monitorTarget)
+    public void monitorFile(String pathname, int monitorLength, AddressPort monitoringClient)
     {
         // Adds the monitoring of the file
-        synchronized (monitoringSet)
+        synchronized (monitoringMap)
         {
-            if(monitoringSet.get(pathname) == null)
+            if(monitoringMap.get(pathname) == null)
             {
-                monitoringSet.put(pathname, new LinkedList<>());
+                monitoringMap.put(pathname, new HashSet<>());
             }
-            monitoringSet.get(pathname).add(monitorTarget);
+            monitoringMap.get(pathname).add(monitoringClient);
         }
 
         // Create a new thread which removes the monitoring after the interval
@@ -86,17 +210,22 @@ public class FileServer
                 e.printStackTrace();
             }
 
-            synchronized (monitoringSet)
+            synchronized (monitoringMap)
             {
-                LinkedList<String> monitorList = monitoringSet.get(pathname);
-                monitorList.remove(monitorTarget);
+                HashSet<AddressPort> clientSet = monitoringMap.get(pathname);
+                if(clientSet == null)
+                    return;
 
-                if(monitorList.isEmpty())
-                    monitoringSet.remove(pathname);
+                clientSet.remove(monitoringClient);
 
+                if(clientSet.isEmpty())
+                    monitoringMap.remove(pathname);
             }
         }).start();
+
+        log("File " + pathname + " has been monitored by client at " + monitoringClient.toString(), 1);
     }
+
 
 
     public void insertFile(String pathname, int offset, byte[] data) throws IOException
@@ -115,18 +244,6 @@ public class FileServer
             bo.write(bi.read());
         }
 
-//        try {
-//            byte[] buf = new byte[1024];
-//            int totalBytes = 0;
-//            int bytesRead;
-//            while ((bytesRead = bi.read(buf)) > 0) {
-//                totalBytes += bytesRead;
-//                bo.write(buf, 0, (totalBytes > offset) ? offset % 1024 : bytesRead);
-//            }
-//        } finally {
-//        }
-
-
         bo.write(data);
 
         int read;
@@ -141,16 +258,35 @@ public class FileServer
         if(!(origFile.delete() && tempFile.renameTo(origFile)))
             throw new IOException("Cannot delete original file or rename temporary file. Possibly due to original file still in use");
 
-        if(monitoringSet.get(pathname) != null)
+        log("File " + pathname + " successfully inserted into", 1);
+
+        synchronized (monitoringMap)
         {
-            monitoringSet.get(pathname).forEach(target -> {
-                sendUpdates(target, pathname, data, offset);
-            });
+            if(monitoringMap.get(pathname) != null)
+            {
+                monitoringMap.get(pathname).forEach(target -> {
+                    sendUpdates(target, pathname, data, offset);
+                });
+            }
         }
+
     }
 
-    private void sendUpdates(String target, String pathname, byte[] updates, int offset)
+    private void sendUpdates(AddressPort target, String pathname, byte[] updates, int offset)
     {
-        System.out.println("To target " + target + ", file " + pathname + " has been updated at " + offset + ": " + new String(updates));
+        log("To target " + "T E S T" + ", file " + pathname + " has been updated at " + offset + ": " + new String(updates), 1);
+    }
+
+    private void sendBytes(byte[] bytes, InetAddress address, int port) throws SizeLimitExceededException
+    {
+        if(bytes.length > MAX_PACKET_BYTES)
+            throw new SizeLimitExceededException("Sequence of bytes too big for a UDP datagram");
+    }
+
+
+    private void log(String content, int mask)
+    {
+        if((mask & DEBUG_MASK) > 0)
+            System.out.println(content);
     }
 }

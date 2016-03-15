@@ -2,6 +2,7 @@ package com.CZ4013.marshalling;
 
 
 import javax.naming.SizeLimitExceededException;
+import javax.naming.event.ObjectChangeListener;
 import java.nio.charset.StandardCharsets;
 
 public class Marshaller
@@ -10,9 +11,127 @@ public class Marshaller
     public static final int IntegerType = 0;
     public static final int StringType = 1;
     public static final int IntArrayType = 2;
-    public static final int ByteType = 3;
+    public static final int ByteArrayType = 3;
+    public static final int ByteType = 4;
+
+    public static final int MAX_PACKET_BYTES = 60000;
 
     private byte[] _bytes;
+
+
+    public Marshaller(Object... arguments) throws SizeLimitExceededException
+    {
+        for(int i = 0; i < arguments.length; i++)
+        {
+
+            Class c = arguments[i].getClass();
+
+            if(c == Integer.class)
+            {
+                arguments[i] = marshalInt((int)arguments[i]);
+            }
+            else if(c == String.class)
+            {
+                arguments[i] = marshalString((String)arguments[i]);
+
+            }
+            else if(c == byte[].class)
+            {
+                arguments[i] = marshallByteArray((byte[])arguments[i]);
+
+            }
+            else if(c == int[].class)
+            {
+                arguments[i] = marshalIntArray((int[])arguments[i]);
+
+            }
+            else if(c == Byte.class)
+            {
+                arguments[i] = marshalByte((byte)arguments[i]);
+            }
+        }
+
+
+        int totalSize = 0;
+        int position = 0;
+
+        for(Object obj : arguments)
+        {
+            MarshalledObject val = (MarshalledObject)obj;
+
+            totalSize += val.bytes.length;
+
+            switch (val.type)
+            {
+                case IntegerType:
+                    totalSize++;
+                    break;
+                case StringType:
+                    totalSize += 3;
+                    break;
+                case IntArrayType:
+                    totalSize += 3;
+                    break;
+                case ByteArrayType:
+                    totalSize += 3;
+                    break;
+                case ByteType:
+                    totalSize += 0;
+            }
+        }
+
+        _bytes = new byte[totalSize];
+
+        for(Object obj : arguments)
+        {
+            MarshalledObject val = (MarshalledObject) obj;
+
+            switch (val.type)
+            {
+                case IntegerType:
+                    _bytes[position++] = (byte)Marshaller.IntegerType;
+                    break;
+                case StringType:
+                {
+                    _bytes[position++] = (byte)Marshaller.StringType;
+                    int len = val.bytes.length;
+                    byte msb = (byte) (len >>> 8);
+                    byte lsb = (byte) len;
+                    _bytes[position++] = msb;
+                    _bytes[position++] = lsb;
+                    break;
+                }
+                case IntArrayType:
+                {
+                    _bytes[position++] = (byte)Marshaller.IntArrayType;
+                    int len = val.bytes.length;
+                    byte msb = (byte) (len >>> 8);
+                    byte lsb = (byte) len;
+                    _bytes[position++] = msb;
+                    _bytes[position++] = lsb;
+                    break;
+                }
+                case ByteArrayType:
+                {
+                    _bytes[position++] = (byte)Marshaller.ByteArrayType;
+                    int len = val.bytes.length;
+                    byte msb = (byte) (len >>> 8);
+                    byte lsb = (byte) len;
+                    _bytes[position++] = msb;
+                    _bytes[position++] = lsb;
+                    break;
+                }
+                case ByteType:
+                {
+
+                    break;
+                }
+            }
+
+            System.arraycopy(val.bytes, 0, _bytes, position, val.bytes.length);
+            position += val.bytes.length;
+        }
+    }
 
     /**
      * Takes in an array of MarshalledObjects and converts it into an internal byte array. These MarshalledObjects can be obtained from the static functions on the Marshaller
@@ -37,6 +156,12 @@ public class Marshaller
                     break;
                 case IntArrayType:
                     totalSize += 3;
+                    break;
+                case ByteArrayType:
+                    totalSize += 3;
+                    break;
+                case ByteType:
+                    totalSize += 0;
             }
         }
 
@@ -68,6 +193,21 @@ public class Marshaller
                     byte lsb = (byte) len;
                     _bytes[position++] = msb;
                     _bytes[position++] = lsb;
+                    break;
+                }
+                case ByteArrayType:
+                {
+                    _bytes[position++] = (byte)Marshaller.ByteArrayType;
+                    int len = val.bytes.length;
+                    byte msb = (byte) (len >>> 8);
+                    byte lsb = (byte) len;
+                    _bytes[position++] = msb;
+                    _bytes[position++] = lsb;
+                    break;
+                }
+                case ByteType:
+                {
+
                     break;
                 }
             }
@@ -122,10 +262,32 @@ public class Marshaller
         return new MarshalledObject(Marshaller.StringType, output);
     }
 
+    public static MarshalledObject marshalByte(byte b)
+    {
+        byte[] output = new byte[]{b};
+
+        return new MarshalledObject(Marshaller.ByteType, output);
+    }
+
     public static String unMarshallString(byte[] value)
     {
         return new String(value, StandardCharsets.UTF_16);
     }
+
+
+    public static MarshalledObject marshallByteArray(byte[] array) throws SizeLimitExceededException
+    {
+        if(array.length > 2 << 16)
+        {
+            throw new SizeLimitExceededException("Length is longer than 2 ^ 16. The header only allocates 2 bytes to store length");
+        }
+
+        byte[] output = new byte[array.length];
+        System.arraycopy(array, 0, output, 0, array.length);
+
+        return new MarshalledObject(Marshaller.ByteArrayType, output);
+    }
+
 
 
     public static MarshalledObject marshalIntArray(int[] array) throws SizeLimitExceededException
