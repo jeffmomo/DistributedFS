@@ -18,22 +18,9 @@ public class Main {
     public static void main(String[] args) throws Exception {
 
 
-        // To marshal variables into bytes, we use the Marshaller.
-        // Provide to the marshaller an array of MarshalledObjects
-        Marshaller m = new Marshaller(
-                new MarshalledObject[]
-                {
-                        Marshaller.marshalByte((byte)3),
-                        Marshaller.marshalInt(5),
-                        Marshaller.marshalString("jello"),
-                        Marshaller.marshalInt(-1),
-                        Marshaller.marshalInt(Integer.MAX_VALUE),
-                        Marshaller.marshalIntArray(new int[]{-1,0,1})
-                });
-
-
-        // WHEN MARSHALLING ARRAYS USE THE PRIMITIVE values and arrays
-        m = new Marshaller((byte)3, (int)5, "jello", -1, Integer.MAX_VALUE, new int[]{-1,0,1});
+        // WHEN MARSHALLING ARRAYS USE THE PRIMITIVE values and arrays.
+        // Make sure to cast ambiguous args (e.g. integer as byte) so that the Marshaller knows what to treat each argument as
+        Marshaller m = new Marshaller((byte)3, (int)5, "jello", -1, Integer.MAX_VALUE, new int[]{-1,0,1});
 
         // This gets the marshalled bytes which is ready for transfer
         byte[] marshalledBytes = m.getBytes();

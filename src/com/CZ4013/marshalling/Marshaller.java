@@ -19,11 +19,15 @@ public class Marshaller
     private byte[] _bytes;
 
 
+    /**
+     * Easy to use marshaller. Directly input the arguments into it, making sure to cast it to the appropriate type
+     * @param arguments Arguments of any type
+     * @throws SizeLimitExceededException
+     */
     public Marshaller(Object... arguments) throws SizeLimitExceededException
     {
         for(int i = 0; i < arguments.length; i++)
         {
-
             Class c = arguments[i].getClass();
 
             if(c == Integer.class)
@@ -134,9 +138,99 @@ public class Marshaller
     }
 
     /**
+     * Returns the marshalled byte array
+     * @return
+     */
+    public byte[] getBytes()
+    {
+        return _bytes;
+    }
+
+
+    /**
+     *
+     * @param value
+     * @return Returns a MarshalledObject representing the int
+     */
+    public static MarshalledObject marshalInt(int value)
+    {
+        byte[] output = new byte[4];
+
+        //output[0] = Marshaller.IntegerType;
+        output[0] = (byte)(value >>> 24);
+        output[1] = (byte)(value >>> 16);
+        output[2] = (byte)(value >>> 8);
+        output[3] = (byte)value;
+
+        return new MarshalledObject(Marshaller.IntegerType, output);
+    }
+
+    public static MarshalledObject marshalString(String value) throws SizeLimitExceededException
+    {
+        byte[] output = value.getBytes(StandardCharsets.UTF_16);
+
+        if(output.length > 2 << 16)
+        {
+            throw new SizeLimitExceededException("String has length in bytes of longer than 2^16 bits");
+        }
+
+        return new MarshalledObject(Marshaller.StringType, output);
+    }
+
+    public static MarshalledObject marshalByte(byte b)
+    {
+        byte[] output = new byte[]{b};
+
+        return new MarshalledObject(Marshaller.ByteType, output);
+    }
+
+
+    public static MarshalledObject marshallByteArray(byte[] array) throws SizeLimitExceededException
+    {
+        if(array.length > 2 << 16)
+        {
+            throw new SizeLimitExceededException("Length is longer than 2 ^ 16. The header only allocates 2 bytes to store length");
+        }
+
+        byte[] output = new byte[array.length];
+        System.arraycopy(array, 0, output, 0, array.length);
+
+        return new MarshalledObject(Marshaller.ByteArrayType, output);
+    }
+
+
+
+    public static MarshalledObject marshalIntArray(int[] array) throws SizeLimitExceededException
+    {
+        if(array.length > 2 << 16)
+        {
+            throw new SizeLimitExceededException("Array has length of longer than 2^16 bits");
+        }
+
+        byte[] output = new byte[array.length * 4];
+
+        for(int i = 0; i < array.length; i++)
+        {
+            int value = array[i];
+            byte[] integer = new byte[4];
+
+            integer[0] = (byte)(value >>> 24);
+            integer[1] = (byte)(value >>> 16);
+            integer[2] = (byte)(value >>> 8);
+            integer[3] = (byte)value;
+
+            System.arraycopy(integer, 0, output, i * 4, 4);
+
+        }
+
+        return new MarshalledObject(Marshaller.IntArrayType, output);
+    }
+
+    /**
      * Takes in an array of MarshalledObjects and converts it into an internal byte array. These MarshalledObjects can be obtained from the static functions on the Marshaller
      * @param values An array of marshalled objects
      */
+    @Deprecated
     public Marshaller(MarshalledObject[] values)
     {
         int totalSize = 0;
@@ -217,118 +311,6 @@ public class Marshaller
         }
     }
 
-    /**
-     * Returns the marshalled byte array
-     * @return
-     */
-    public byte[] getBytes()
-    {
-        return _bytes;
-    }
-
-
-    /**
-     *
-     * @param value
-     * @return Returns a MarshalledObject representing the int
-     */
-    public static MarshalledObject marshalInt(int value)
-    {
-        byte[] output = new byte[4];
-
-        //output[0] = Marshaller.IntegerType;
-        output[0] = (byte)(value >>> 24);
-        output[1] = (byte)(value >>> 16);
-        output[2] = (byte)(value >>> 8);
-        output[3] = (byte)value;
-
-        return new MarshalledObject(Marshaller.IntegerType, output);
-    }
-
-    public static int unMarshallInt(byte[] value)
-    {
-        return ((value[0] << 24) & 0xFF000000 | (value[1] << 16) & 0x00FF0000 | (value[2] << 8) & 0x0000FF00 | (value[3]) & 0xFF);
-    }
-
-    public static MarshalledObject marshalString(String value) throws SizeLimitExceededException
-    {
-        byte[] output = value.getBytes(StandardCharsets.UTF_16);
-
-        if(output.length > 2 << 16)
-        {
-            throw new SizeLimitExceededException("String has length in bytes of longer than 2^16 bits");
-        }
-
-        return new MarshalledObject(Marshaller.StringType, output);
-    }
-
-    public static MarshalledObject marshalByte(byte b)
-    {
-        byte[] output = new byte[]{b};
-
-        return new MarshalledObject(Marshaller.ByteType, output);
-    }
-
-    public static String unMarshallString(byte[] value)
-    {
-        return new String(value, StandardCharsets.UTF_16);
-    }
-
-
-    public static MarshalledObject marshallByteArray(byte[] array) throws SizeLimitExceededException
-    {
-        if(array.length > 2 << 16)
-        {
-            throw new SizeLimitExceededException("Length is longer than 2 ^ 16. The header only allocates 2 bytes to store length");
-        }
-
-        byte[] output = new byte[array.length];
-        System.arraycopy(array, 0, output, 0, array.length);
-
-        return new MarshalledObject(Marshaller.ByteArrayType, output);
-    }
-
-
-
-    public static MarshalledObject marshalIntArray(int[] array) throws SizeLimitExceededException
-    {
-        if(array.length > 2 << 16)
-        {
-            throw new SizeLimitExceededException("Array has length of longer than 2^16 bits");
-        }
-
-        byte[] output = new byte[array.length * 4];
-
-        for(int i = 0; i < array.length; i++)
-        {
-            int value = array[i];
-            byte[] integer = new byte[4];
-
-            integer[0] = (byte)(value >>> 24);
-            integer[1] = (byte)(value >>> 16);
-            integer[2] = (byte)(value >>> 8);
-            integer[3] = (byte)value;
-
-            System.arraycopy(integer, 0, output, i * 4, 4);
-
-        }
-
-        return new MarshalledObject(Marshaller.IntArrayType, output);
-    }
-
-    public static int[] unMarshallIntArray(byte[] value)
-    {
-        int numInts = value.length / 4;
-        int[] output = new int[numInts];
-
-        for(int i = 0; i < numInts; i++)
-        {
-            int idx = i * 4;
-            output[i] = ((value[idx] << 24) & 0xFF000000 | (value[idx + 1] << 16) & 0x00FF0000 | (value[idx + 2] << 8) & 0x0000FF00 | (value[idx + 3]) & 0xFF);
-        }
-
-        return output;
-    }
 
 
 }
