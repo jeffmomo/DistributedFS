@@ -1,17 +1,8 @@
 package com.CZ4013;
 
-import com.CZ4013.marshalling.MarshalledObject;
 import com.CZ4013.marshalling.Marshaller;
 import com.CZ4013.marshalling.UnMarshaller;
-import com.CZ4013.server.AddressPort;
 import com.CZ4013.server.FileServer;
-import com.CZ4013.server.QueryType;
-
-import java.net.DatagramPacket;
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.nio.charset.StandardCharsets;
-import java.util.Queue;
 
 public class Main {
 
@@ -41,29 +32,27 @@ public class Main {
 
         FileServer fs = new FileServer();
 
+
         // An arbitrary packet used for testing purposes
-        DatagramPacket testPkt = new DatagramPacket(new byte[5], 0, InetAddress.getByName("127.0.0.1"), 0);
-
-        fs.processQuery(testPkt, new Marshaller((byte) QueryType.MONITOR_FILE, "test", 100).getBytes());
-        fs.processQuery(testPkt, new Marshaller((byte) QueryType.MONITOR_FILE, "test", 100).getBytes());
-
-//        fs.monitorFile("test", 100, new AddressPort(InetAddress.getByName("127.0.0.1"), 0));
-//        fs.monitorFile("test", 100, new AddressPort(InetAddress.getByName("127.0.0.1"), 0));
-
-        fs.processQuery(testPkt, new Marshaller((byte) QueryType.READ_FILE, "test", 0, -1).getBytes());
-
-        //System.out.println(new String(fs.readFile("test", 0, -1), StandardCharsets.UTF_8));
-
-        fs.processQuery(testPkt, new Marshaller((byte) QueryType.INSERT_FILE, "test", 1, "b".getBytes()).getBytes());
-        Thread.sleep(50);
-        fs.processQuery(testPkt, new Marshaller((byte) QueryType.INSERT_FILE, "test", 1, "b".getBytes()).getBytes());
-        Thread.sleep(500);
-        fs.processQuery(testPkt, new Marshaller((byte) QueryType.INSERT_FILE, "test", 1, "b".getBytes()).getBytes());
-
-
-        fs.processQuery(testPkt, new Marshaller((byte) QueryType.READ_FILE, "test", 0, -1).getBytes());
-
-        fs.processQuery(testPkt, new Marshaller((byte) QueryType.DUPLICATE_FILE, "test").getBytes());
+//        DatagramPacket testPkt = new DatagramPacket(new byte[5], 0, InetAddress.getByName("127.0.0.1"), 0);
+//
+//        fs.processQuery(testPkt, new Marshaller((byte) MessageType.MONITOR_FILE, "test", 100).getBytes());
+//        fs.processQuery(testPkt, new Marshaller((byte) MessageType.MONITOR_FILE, "test", 100).getBytes());
+//
+//
+//        fs.processQuery(testPkt, new Marshaller((byte) MessageType.READ_FILE, "test", 0, -1).getBytes());
+//
+//
+//        fs.processQuery(testPkt, new Marshaller((byte) MessageType.INSERT_FILE, "test", 1, "b".getBytes()).getBytes());
+//        Thread.sleep(50);
+//        fs.processQuery(testPkt, new Marshaller((byte) MessageType.INSERT_FILE, "test", 1, "b".getBytes()).getBytes());
+//        Thread.sleep(500);
+//        fs.processQuery(testPkt, new Marshaller((byte) MessageType.INSERT_FILE, "test", 1, "b".getBytes()).getBytes());
+//
+//
+//        fs.processQuery(testPkt, new Marshaller((byte) MessageType.READ_FILE, "test", 0, -1).getBytes());
+//
+//        fs.processQuery(testPkt, new Marshaller((byte) MessageType.DUPLICATE_FILE, "test").getBytes());
 
         //fs.deleteFile(fs.duplicateFile("test"));
 

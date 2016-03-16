@@ -1,5 +1,6 @@
 package com.CZ4013.marshalling;
 
+
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -86,5 +87,20 @@ public class UnMarshaller
         }
 
         return _bytes[_position++];
+    }
+
+    public void resetPosition()
+    {
+        _position = 0;
+    }
+
+    public byte[] getBytes()
+    {
+        return _bytes;
+    }
+
+    public void modifyByteAt(byte b, int pos)
+    {
+        _bytes[pos] = b;
     }
 }

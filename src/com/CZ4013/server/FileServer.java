@@ -1,28 +1,40 @@
 package com.CZ4013.server;
 
+import com.CZ4013.marshalling.Marshaller;
 import com.CZ4013.marshalling.UnMarshaller;
 
 import javax.naming.SizeLimitExceededException;
 import java.io.*;
 import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.file.Files;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 
+
+public class FileServer
+{
+    public FileServer() throws IOException
+    {
+        new FileServerThread().start();
+    }
+}
 
 
 
 /**
  *
  */
-public class FileServer
+class FileServerThread extends Thread
 {
+    public static final int MAX_PACKET_BYTES = 60000;
+    public static final int DEBUG_MASK = 4;
+    public static final int CACHE_TIMEOUT = 20000;
 
-
-    public static final int MAX_PACKET_BYTES = 600000;
-
-    public static final int DEBUG_MASK = 2;
+    private DatagramSocket _socket;
 
     /**
      *
@@ -37,16 +49,83 @@ public class FileServer
      * Path normalisation?? How do we handle it. Do we need to handle it?
      *
      *  We may need to keep hash table of files that are currently being accessed, to lock them.
+     *  or we can just throw errors
      */
 
     final HashMap<String, HashSet<AddressPort>> monitoringMap = new HashMap<>();
 
-    public FileServer()
+    final HashMap<RequesterMsg, byte[]> responseCache = new HashMap<>();
+
+
+    public FileServerThread() throws IOException
     {
+        super();
+
+        _socket = new DatagramSocket(4445);
 
     }
 
-    public void processQuery(DatagramPacket packet, byte[] query) throws Exception
+
+    @Override
+    public void run()
+    {
+        while(true)
+        {
+            byte[] buf = new byte[MAX_PACKET_BYTES];
+
+            DatagramPacket packet = new DatagramPacket(buf, MAX_PACKET_BYTES);
+
+            try
+            {
+                _socket.receive(packet);
+            }
+            catch (IOException e)
+            {
+                e.printStackTrace();
+            }
+
+
+            byte[] packetData = packet.getData();
+            boolean useAtLeastOnceSemantics = false;
+            try
+            {
+                UnMarshaller um = new UnMarshaller(packetData);
+                if((int)(um.getNextByte()) > 50)
+                {
+                    useAtLeastOnceSemantics = true;
+                    um.resetPosition();
+                    um.modifyByteAt((byte)(um.getNextByte() - 50), 0);
+                    packet.setData(um.getBytes());
+                }
+            }catch(Exception e){e.printStackTrace();}
+
+            AddressPort requester = new AddressPort(packet);
+            byte[] cachedResponse = responseCache.get(new RequesterMsg(requester, packetData));
+            if(cachedResponse != null && !useAtLeastOnceSemantics)
+            {
+                sendRaw(requester, cachedResponse);
+                log("Duplicate request sent from " + requester.toString(), 4);
+                continue;
+            }
+
+
+
+            try
+            {
+                processQuery(packet, buf);
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+        }
+
+
+
+    }
+
+
+    public void processQuery(DatagramPacket packet, byte[] query) throws Exception, SizeLimitExceededException
     {
         UnMarshaller um = new UnMarshaller(query);
 
@@ -56,7 +135,7 @@ public class FileServer
 
         switch (queryType)
         {
-            case QueryType.READ_FILE:
+            case MessageType.READ_FILE:
             {
                 String path = (String) um.getNext();
                 int offset = (Integer) um.getNext();
@@ -65,14 +144,17 @@ public class FileServer
                 try
                 {
                     byte[] content = readFile(path, offset, length);
-                    respond(packet, content);
-                } catch (IOException e)
+                    respond(packet, MessageType.RESPONSE_BYTES, content, query, (int) um.getNext());
+                    log("File at " + path + " is read from " + offset + " to " + offset + length, 4);
+                }
+                catch (IOException e)
                 {
-                    respond(packet, "Error in reading file");
+                    respondError(packet, ErrorCodes.IOError, e.getMessage());
+                    log("Error: file at " + path + " is not read from " + offset + " to " + offset + length, 12);
                 }
                 break;
             }
-            case QueryType.INSERT_FILE:
+            case MessageType.INSERT_FILE:
             {
                 String path = (String) um.getNext();
                 int offset = (Integer) um.getNext();
@@ -81,73 +163,201 @@ public class FileServer
                 try
                 {
                     insertFile(path, offset, bytes);
-                    respond(packet, "Success: Bytes inserted");
+                    respond(packet, MessageType.RESPONSE_SUCCESS, "Success: Bytes inserted", query, (int) um.getNext());
+                    log("file at " + path + " had " + bytes.length + " bytes inserted at " + offset, 4);
                 }
-                catch(Exception e)
+                catch(IOException e)
                 {
-                    respond(packet, "Error in file insertion");
+                    respondError(packet, ErrorCodes.IOError, e.getMessage());
+                    log("Error: file at " + path + " had " + bytes.length + " bytes not inserted at " + offset, 12);
                 }
                 break;
             }
-            case QueryType.MONITOR_FILE:
+            case MessageType.MONITOR_FILE:
             {
                 String path = (String) um.getNext();
                 int monitorLength = (Integer) um.getNext();
 
-                try
+
+                if(monitorFile(path, monitorLength, new AddressPort(packet)))
                 {
-                    monitorFile(path, monitorLength, new AddressPort(packet));
-                    respond(packet, "Success: File monitored");
-                } catch (Exception e)
-                {
-                    respond(packet, "Error in monitoring file");
+                    respond(packet, MessageType.RESPONSE_SUCCESS, "Success: File monitored", query, (int) um.getNext());
+                    log("File " + path + " is monitored", 4);
                 }
+                else
+                {
+                    respondError(packet, ErrorCodes.NotFound, "File does not exist");
+                    log("File " + path + " is not monitored", 12);
+                }
+
 
                 break;
             }
-            case QueryType.DELETE_FILE:
+            case MessageType.DELETE_FILE:
             {
                 String path = (String) um.getNext();
 
-                try
+
+                if(deleteFile(path))
                 {
-                    if(deleteFile(path))
-                        respond(packet, "Success: File deleted");
-                    else
-                        respond(packet, "Failure: File cannot be deleted");
+                    respond(packet, MessageType.RESPONSE_SUCCESS, "Success: File deleted", query, (int) um.getNext());
+
+                    log("File " + path + " is deleted", 4);
                 }
-                catch (Exception e)
+                else
                 {
-                    respond(packet, "Error in deleting file");
+                    respondError(packet, ErrorCodes.GENERAL, "Cannot delete file");
+                    log("File " + path + " is not deleted", 12);
                 }
+
                 break;
             }
-            case QueryType.DUPLICATE_FILE:
+            case MessageType.DUPLICATE_FILE:
             {
                 String path = (String) um.getNext();
 
                 try
                 {
                     String filename = duplicateFile(path);
-                    respond(packet, "Success: File duplicated, new file name is: '" + filename + "'");
+                    respond(packet, MessageType.RESPONSE_PATH, filename, query, (int) um.getNext());
+                    log("File " + path + " is duplicated as " + filename, 4);
                 }
-                catch (Exception e)
+                catch (IOException e)
                 {
-                    respond(packet, "Error: Did not duplicate file");
+                    respondError(packet, ErrorCodes.IOError, e.getMessage());
+                    log("File " + path + " is not duplicated", 12);
                 }
                 break;
             }
         }
     }
 
-    private void respond(DatagramPacket queryPkt, String message)
+
+    private void respondError(DatagramPacket packet, int errorCode, String message) throws SizeLimitExceededException
     {
-        log("response to client TEST: " + message, 2);
+        byte[] buf = new Marshaller((byte) MessageType.ERROR, errorCode, message).getBytes();
+
+        if(buf.length > MAX_PACKET_BYTES)
+            throw new SizeLimitExceededException("Message too large for UDP datagram");
+
+        InetAddress address = packet.getAddress();
+        int port = packet.getPort();
+        DatagramPacket out = new DatagramPacket(buf, buf.length, address, port);
+
+        try
+        {
+            _socket.send(out);
+        }
+        catch(Exception e){e.printStackTrace();}
+
+        log("sent error to client : " + message, 2);
     }
 
-    private void respond(DatagramPacket queryPkt, byte[] bytes)
+    private void putCache(RequesterMsg request, byte[] response)
     {
-        log("bytes to client test: length = " + bytes.length, 2);
+        synchronized (responseCache)
+        {
+            responseCache.put(request, response);
+        }
+
+        new Thread(() ->
+        {
+            try
+            {
+                Thread.sleep(CACHE_TIMEOUT);
+            }
+            catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+
+            synchronized (responseCache)
+            {
+                responseCache.remove(request);
+            }
+        }).start();
+    }
+
+    private void respond(DatagramPacket packet, int msgType, String message, byte[] request, int sequenceNum) throws SizeLimitExceededException
+    {
+
+        byte[] buf = new Marshaller((byte) msgType, message, sequenceNum).getBytes();
+
+        if(buf.length > MAX_PACKET_BYTES)
+            throw new SizeLimitExceededException("Message too large for UDP datagram");
+
+        InetAddress address = packet.getAddress();
+        int port = packet.getPort();
+        DatagramPacket out = new DatagramPacket(buf, buf.length, address, port);
+
+        try
+        {
+            _socket.send(out);
+            log("responded to client TEST: " + message, 2);
+
+            putCache(new RequesterMsg(new AddressPort(packet), request), buf);
+        }
+        catch(Exception e){e.printStackTrace();}
+
+    }
+
+    private void respond(DatagramPacket packet, int msgType, byte[] bytes, byte[] request, int sequenceNum) throws SizeLimitExceededException
+    {
+        byte[] buf = new Marshaller((byte) msgType, bytes, sequenceNum).getBytes();
+
+        if(buf.length > MAX_PACKET_BYTES)
+            throw new SizeLimitExceededException("Message too large for UDP datagram");
+
+        InetAddress address = packet.getAddress();
+        int port = packet.getPort();
+        DatagramPacket out = new DatagramPacket(buf, buf.length, address, port);
+
+        try
+        {
+            _socket.send(out);
+            log("bytes to client test: length = " + bytes.length, 2);
+
+
+            putCache(new RequesterMsg(new AddressPort(packet), request), buf);
+        }
+        catch(Exception e){e.printStackTrace();}
+
+    }
+
+    private void respondCallback(AddressPort target, String pathname, byte[] updates, int offset) throws SizeLimitExceededException
+    {
+        byte[] buf = new Marshaller((byte) MessageType.CALLBACK, pathname, updates).getBytes();
+
+        if(buf.length > MAX_PACKET_BYTES)
+            throw new SizeLimitExceededException("Message too large for UDP datagram");
+
+        InetAddress address = target.address;
+        int port = target.port;
+        DatagramPacket out = new DatagramPacket(buf, buf.length, address, port);
+
+        try
+        {
+            _socket.send(out);
+            log("Callback to client " + target.toString() + ", file " + pathname + " has been updated at " + offset + ": " + new String(updates), 2);
+
+        }
+        catch(Exception e){e.printStackTrace();}
+
+    }
+
+    private void sendRaw(AddressPort target, byte[] raw)
+    {
+        InetAddress address = target.address;
+        int port = target.port;
+        DatagramPacket out = new DatagramPacket(raw, raw.length, address, port);
+
+        try
+        {
+            _socket.send(out);
+        }
+        catch(Exception e){e.printStackTrace();}
+
+        log("Raw data sent to " + target.toString(), 2);
     }
 
 
@@ -188,8 +398,11 @@ public class FileServer
         return buffer;
     }
 
-    public void monitorFile(String pathname, int monitorLength, AddressPort monitoringClient)
+    public boolean monitorFile(String pathname, int monitorLength, AddressPort monitoringClient)
     {
+        if(!new File(pathname).exists())
+            return false;
+
         // Adds the monitoring of the file
         synchronized (monitoringMap)
         {
@@ -224,6 +437,9 @@ public class FileServer
         }).start();
 
         log("File " + pathname + " has been monitored by client at " + monitoringClient.toString(), 1);
+
+        return true;
+
     }
 
 
@@ -238,6 +454,7 @@ public class FileServer
 
         BufferedInputStream bi = new BufferedInputStream(new FileInputStream(origFile));
         BufferedOutputStream bo = new BufferedOutputStream(new FileOutputStream(tempFile));
+
 
         for(int pos = 0; pos < offset; pos++)
         {
@@ -265,28 +482,31 @@ public class FileServer
             if(monitoringMap.get(pathname) != null)
             {
                 monitoringMap.get(pathname).forEach(target -> {
-                    sendUpdates(target, pathname, data, offset);
+                    try
+                    {
+                        respondCallback(target, pathname, data, offset);
+                    }
+                    catch (SizeLimitExceededException e)
+                    {
+                        e.printStackTrace();
+                    }
                 });
             }
         }
 
     }
 
-    private void sendUpdates(AddressPort target, String pathname, byte[] updates, int offset)
-    {
-        log("To target " + "T E S T" + ", file " + pathname + " has been updated at " + offset + ": " + new String(updates), 2);
-    }
 
-    private void sendBytes(byte[] bytes, InetAddress address, int port) throws SizeLimitExceededException
-    {
-        if(bytes.length > MAX_PACKET_BYTES)
-            throw new SizeLimitExceededException("Sequence of bytes too big for a UDP datagram");
-    }
+
 
 
     private void log(String content, int mask)
     {
+        Date d = new Date();
+
+
+        String logStr = "[" + new SimpleDateFormat("HH:mm:ss.SSS").format(d) + "] ";
         if((mask & DEBUG_MASK) > 0)
-            System.out.println(content);
+            System.out.println(logStr + content);
     }
 }
