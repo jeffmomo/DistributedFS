@@ -1,7 +1,7 @@
 package com.CZ4013.server;
 
 /**
- * Created by mdl94 on 16/03/2016.
+ * Some error codes for errors
  */
 public class ErrorCodes
 {

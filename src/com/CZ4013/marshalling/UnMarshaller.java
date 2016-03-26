@@ -23,11 +23,15 @@ public class UnMarshaller
     /**
      * Gets the next parameter. Need to cast this into the desired object.
      * Returns null if there are no more parameters
+     * DO NOT GET A BYTE WITH THIS METHOD, USE getByte() INSTEAD
+     * This is as a byte do not have an associated type byte stored before it
      * @return An object representing the parameter to be extracted from the byte array
      * @throws Exception is thrown when an index out of bounds error occurs when extracting data. This usually means the byte array is not well formed.
      */
     public Object getNext() throws Exception
     {
+        // If there is no more bytes to go through, return a null object
+        // This can be handled thru null checking
         if(_position + 1 >= _bytes.length)
         {
             return null;
@@ -35,6 +39,8 @@ public class UnMarshaller
 
         try
         {
+            // Checks type of the next object to extract
+            // Depending on the type performs the appropirate unmarshalling from bytes
             switch (_bytes[_position++])
             {
                 case Marshaller.IntegerType:
@@ -71,14 +77,22 @@ public class UnMarshaller
                     return output;
             }
         }
+        // If there is any exceptions thrown, that means the byte array has errors or wrong extraction is performed
         catch (ArrayIndexOutOfBoundsException ex)
         {
             throw new Exception("Byte array is not well formed");
         }
 
+        // If nothing is returned, means the type byte is incorrect and thus byte array is corrupted or wrong extraction is performed
         throw new Exception("Byte array is not well formed");
     }
 
+    /**
+     * Gets the next byte
+     * This must be used if we want to get a byte as a byte do not have an associated type information stored
+     * @return
+     * @throws Exception
+     */
     public byte getNextByte() throws Exception
     {
         if(_position + 1 >= _bytes.length)
@@ -89,16 +103,30 @@ public class UnMarshaller
         return _bytes[_position++];
     }
 
+
+    /**
+     *  Resets the position of the unmarshaller
+     */
     public void resetPosition()
     {
         _position = 0;
     }
 
+
+    /**
+     * Returns the bytes used in this unmarshaller
+     * @return
+     */
     public byte[] getBytes()
     {
         return _bytes;
     }
 
+    /**
+     * Modifies a specific byte at a specific location
+     * @param b
+     * @param pos
+     */
     public void modifyByteAt(byte b, int pos)
     {
         _bytes[pos] = b;

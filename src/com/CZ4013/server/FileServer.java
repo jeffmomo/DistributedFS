@@ -14,7 +14,9 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 
-
+/**
+ * Starts the file server thread
+ */
 public class FileServer
 {
     public FileServer() throws IOException
@@ -26,25 +28,27 @@ public class FileServer
 
 
 /**
- *
+ * The actual file server
  */
 class FileServerThread extends Thread
 {
+    // Somewhat arbitrary limit on UDP packet size
     public static final int MAX_PACKET_BYTES = 60000;
-    public static final int DEBUG_MASK = 4;
-    public static final int CACHE_TIMEOUT = 20000;
+
+    // For debug usees
+    public static final int DEBUG_MASK = 12;
+
+    // An arbitrary timeout period for detecting duplicated messages
+    public static final int MESSAGE_CACHE_TIMEOUT = 20000;
 
     private DatagramSocket _socket;
 
     /**
      *
-     * ## Thoughts on design ##
+     * ## Some thoughts on design ##
      *
      * We can handle multiple users by getting the ip address and port number of every packet, and put it into a list in a hashtable.
      *
-     * A data array which stores the incomplete data received so far for a certain client
-     * A status array indicating what actions should be taken on the next packet received for that client
-     * Once all data has been received clear the hashtable and do stuff with it
      *
      * Path normalisation?? How do we handle it. Do we need to handle it?
      *
@@ -52,11 +56,15 @@ class FileServerThread extends Thread
      *  or we can just throw errors
      */
 
+    // Hashmap for storing the clients monitoring a filename
     final HashMap<String, HashSet<AddressPort>> monitoringMap = new HashMap<>();
 
+    // Hashmap associating an incoming message from a client, to its response
+    // This is used for the at-most-once invocation semantics
     final HashMap<RequesterMsg, byte[]> responseCache = new HashMap<>();
 
 
+    // Initialises the file server with some arbitrary port
     public FileServerThread() throws IOException
     {
         super();
@@ -65,16 +73,20 @@ class FileServerThread extends Thread
 
     }
 
-
+    /**
+     * Runs the thread
+     */
     @Override
     public void run()
     {
+        // Server always serving requests
         while(true)
         {
             byte[] buf = new byte[MAX_PACKET_BYTES];
 
             DatagramPacket packet = new DatagramPacket(buf, MAX_PACKET_BYTES);
 
+            // Gets a incoming packet
             try
             {
                 _socket.receive(packet);
@@ -85,10 +97,18 @@ class FileServerThread extends Thread
             }
 
 
+            // Gets the data associated with packet
             byte[] packetData = packet.getData();
+
+            // By default we want to use at-most-once semantics
             boolean useAtLeastOnceSemantics = false;
+
             try
             {
+                // We take a peek inside the packet's data
+                // If the request type is > 50, then it is defined as an at-least-once version of the original request type
+                // We then for this request use at-least-once semantics
+                // And we reset the request type byte back to request_byte - 50 such that it can be handled normally
                 UnMarshaller um = new UnMarshaller(packetData);
                 if((int)(um.getNextByte()) > 50)
                 {
@@ -100,16 +120,24 @@ class FileServerThread extends Thread
             }catch(Exception e){e.printStackTrace();}
 
             AddressPort requester = new AddressPort(packet);
+
+            // We try to get a cached response
+            // Note that we use sequence numbers such that duplicated requests can be identified
+            // And that sending the same request twice (but with different seq nums) will mean its 2 different requests
             byte[] cachedResponse = responseCache.get(new RequesterMsg(requester, packetData));
+
+            // If a cached response exists for the request-client combo, then it means a duplicated request was sent.
+            // If we are using at-most-once semantics then we send the cached response back
+            // And we do not process that query
             if(cachedResponse != null && !useAtLeastOnceSemantics)
             {
                 sendRaw(requester, cachedResponse);
                 log("Duplicate request sent from " + requester.toString(), 4);
+
                 continue;
             }
 
-
-
+            // No cached response found or using at-most-once semantics then we process the query
             try
             {
                 processQuery(packet, buf);
@@ -125,6 +153,13 @@ class FileServerThread extends Thread
     }
 
 
+    /**
+     * Processes the query according to its contents
+     * @param packet
+     * @param query
+     * @throws Exception
+     * @throws SizeLimitExceededException
+     */
     public void processQuery(DatagramPacket packet, byte[] query) throws Exception, SizeLimitExceededException
     {
         UnMarshaller um = new UnMarshaller(query);
@@ -135,6 +170,7 @@ class FileServerThread extends Thread
 
         switch (queryType)
         {
+            // Reading a file
             case MessageType.READ_FILE:
             {
                 String path = (String) um.getNext();
@@ -154,6 +190,8 @@ class FileServerThread extends Thread
                 }
                 break;
             }
+
+            // Inserting into a file
             case MessageType.INSERT_FILE:
             {
                 String path = (String) um.getNext();
@@ -173,6 +211,8 @@ class FileServerThread extends Thread
                 }
                 break;
             }
+
+            // Monitoring a file
             case MessageType.MONITOR_FILE:
             {
                 String path = (String) um.getNext();
@@ -193,6 +233,8 @@ class FileServerThread extends Thread
 
                 break;
             }
+
+            // Deleting a file (This is the additional idempotent operation, given no new file with same name was created.... between deletions)
             case MessageType.DELETE_FILE:
             {
                 String path = (String) um.getNext();
@@ -212,6 +254,8 @@ class FileServerThread extends Thread
 
                 break;
             }
+
+            // Duplicate a file with random name (Additional non-idempotent operation)
             case MessageType.DUPLICATE_FILE:
             {
                 String path = (String) um.getNext();
@@ -233,6 +277,13 @@ class FileServerThread extends Thread
     }
 
 
+    /**
+     * Responds to client that an error has occurred
+     * @param packet
+     * @param errorCode
+     * @param message
+     * @throws SizeLimitExceededException
+     */
     private void respondError(DatagramPacket packet, int errorCode, String message) throws SizeLimitExceededException
     {
         byte[] buf = new Marshaller((byte) MessageType.ERROR, errorCode, message).getBytes();
@@ -253,18 +304,26 @@ class FileServerThread extends Thread
         log("sent error to client : " + message, 2);
     }
 
+    /**
+     * Puts a request and response into the cache
+     * Also performs automated removal of the cached response after timeout period
+     * @param request
+     * @param response
+     */
     private void putCache(RequesterMsg request, byte[] response)
     {
+        // As we are using a different thread to perform the timed removal, we need to ensure integrity of the hashtable
         synchronized (responseCache)
         {
             responseCache.put(request, response);
         }
 
+        // Use different thread to remove the cached response after the specified timeout
         new Thread(() ->
         {
             try
             {
-                Thread.sleep(CACHE_TIMEOUT);
+                Thread.sleep(MESSAGE_CACHE_TIMEOUT);
             }
             catch (Exception e)
             {
@@ -278,6 +337,16 @@ class FileServerThread extends Thread
         }).start();
     }
 
+    /**
+     * Sends a string response back to the client
+     * Also performs caching of the response
+     * @param packet
+     * @param msgType
+     * @param message
+     * @param request
+     * @param sequenceNum
+     * @throws SizeLimitExceededException
+     */
     private void respond(DatagramPacket packet, int msgType, String message, byte[] request, int sequenceNum) throws SizeLimitExceededException
     {
 
@@ -301,6 +370,16 @@ class FileServerThread extends Thread
 
     }
 
+    /**
+     * Sends a byte response back to the client
+     * Also performs caching of the response
+     * @param packet
+     * @param msgType
+     * @param bytes
+     * @param request
+     * @param sequenceNum
+     * @throws SizeLimitExceededException
+     */
     private void respond(DatagramPacket packet, int msgType, byte[] bytes, byte[] request, int sequenceNum) throws SizeLimitExceededException
     {
         byte[] buf = new Marshaller((byte) msgType, bytes, sequenceNum).getBytes();
@@ -324,6 +403,14 @@ class FileServerThread extends Thread
 
     }
 
+    /**
+     * Sends an update callback to the monitoring client
+     * @param target
+     * @param pathname
+     * @param updates
+     * @param offset
+     * @throws SizeLimitExceededException
+     */
     private void respondCallback(AddressPort target, String pathname, byte[] updates, int offset) throws SizeLimitExceededException
     {
         byte[] buf = new Marshaller((byte) MessageType.CALLBACK, pathname, updates).getBytes();
@@ -345,6 +432,12 @@ class FileServerThread extends Thread
 
     }
 
+    /**
+     * Sends raw bytes to a client
+     * This mainly used for sending cached responses
+     * @param target
+     * @param raw
+     */
     private void sendRaw(AddressPort target, byte[] raw)
     {
         InetAddress address = target.address;
@@ -361,7 +454,8 @@ class FileServerThread extends Thread
     }
 
 
-    // An idempotent operation
+    // An idempotent operation - deletion of file
+    // Non-idempotent as long as no new files with same name created between deletions
     public boolean deleteFile(String pathname)
     {
         boolean success = new File(pathname).delete();
@@ -371,7 +465,7 @@ class FileServerThread extends Thread
         return success;
     }
 
-    // A non-idempotent operation
+    // A non-idempotent operation - duplication of file into file with random name
     public String duplicateFile(String pathname) throws IOException
     {
         File dupFile = new File(pathname + "_" + Double.toHexString(Math.random()));
@@ -382,6 +476,7 @@ class FileServerThread extends Thread
         return dupFile.getPath();
     }
 
+    // Reads a file at a certain location
     public byte[] readFile(String pathname, int offset, int length) throws IOException
     {
         if(length == -1)
@@ -398,12 +493,20 @@ class FileServerThread extends Thread
         return buffer;
     }
 
+    /**
+     * Monitors a file for a certain duration, and for a certain client
+     * @param pathname
+     * @param monitorLength
+     * @param monitoringClient
+     * @return
+     */
     public boolean monitorFile(String pathname, int monitorLength, AddressPort monitoringClient)
     {
         if(!new File(pathname).exists())
             return false;
 
         // Adds the monitoring of the file
+        // Need synchronisation as removal done by differnt thread
         synchronized (monitoringMap)
         {
             if(monitoringMap.get(pathname) == null)
@@ -444,6 +547,9 @@ class FileServerThread extends Thread
 
 
 
+    // Inserts a certain number of bytes into a file
+    // This requires creating a new file and deleting an old
+    // due to the difficulty of inserting bytes at a random location in a file
     public void insertFile(String pathname, int offset, byte[] data) throws IOException
     {
 
@@ -477,6 +583,7 @@ class FileServerThread extends Thread
 
         log("File " + pathname + " successfully inserted into", 1);
 
+        // Sends callbacks to clients which are monitoring this file
         synchronized (monitoringMap)
         {
             if(monitoringMap.get(pathname) != null)
@@ -500,6 +607,7 @@ class FileServerThread extends Thread
 
 
 
+    // Logs something that could be useful
     private void log(String content, int mask)
     {
         Date d = new Date();

@@ -2,7 +2,11 @@ package com.CZ4013.server;
 
 import java.util.Arrays;
 
-public class RequesterMsg extends Object
+/**
+ * Stores a request message, associated with a requester
+ * This class used for checking for duplicated requests
+ */
+public class RequesterMsg
 {
     public AddressPort requester;
     public byte[] request;
@@ -15,6 +19,8 @@ public class RequesterMsg extends Object
         this.request = request;
         this.messageType = messageType;
     }
+
+    // Bottom methods allows use in hashtable
 
     public int hashCode()
     {

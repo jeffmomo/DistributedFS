@@ -1,12 +1,10 @@
 package com.CZ4013.marshalling;
 
 /**
- * Created by mdl94 on 14/03/2016.
+ * A class representing a marshalled object and its type
  */
 public class MarshalledObject
-
 {
-
     public byte[] bytes;
     public int type;
 

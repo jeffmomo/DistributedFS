@@ -21,6 +21,8 @@ public class TestClient
 
     static void send(byte[] buf) throws IOException
     {
+        // Create a socket directed at self and towards the specific socket 4445.
+        // This should be made customisable
         InetAddress address = InetAddress.getByName("127.0.0.1");
         DatagramPacket packet = new DatagramPacket(buf, buf.length,
                 address, 4445);

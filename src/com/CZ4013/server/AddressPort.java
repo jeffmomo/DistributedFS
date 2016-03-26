@@ -5,9 +5,9 @@ import java.net.DatagramPacket;
 import java.net.InetAddress;
 
 /**
- * Created by mdl94 on 16/03/2016.
+ * Stores the uniquely identifiable address + port information from client
  */
-public class AddressPort extends Object
+public class AddressPort
 {
 
     public InetAddress address;
@@ -19,18 +19,23 @@ public class AddressPort extends Object
         this.port = port;
     }
 
+    /**
+     * Initialises with a datagrampacket
+     * @param packet
+     */
     public AddressPort(DatagramPacket packet)
     {
-        this.address = packet.getAddress();
-        this.port = packet.getPort();
+        this(packet.getAddress(), packet.getPort());
     }
+
+    // Below are methods to allow use in a hashtable
+
 
     @Override
     public int hashCode()
     {
         return (address.toString() + port).hashCode();
     }
-
 
     @Override
     public String toString()

@@ -1,7 +1,8 @@
 package com.CZ4013.server;
 
 /**
- * Created by mdl94 on 16/03/2016.
+ * Identifies some message types which may be sent or received
+ *
  */
 public class MessageType
 {
