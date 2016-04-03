@@ -181,12 +181,12 @@ class FileServerThread extends Thread
                 {
                     byte[] content = readFile(path, offset, length);
                     respond(packet, MessageType.RESPONSE_BYTES, content, query, (int) um.getNext());
-                    log("File at " + path + " is read from " + offset + " to " + offset + length, 4);
+                    log("File at " + path + " is read from " + offset + " to " + (offset + length), 4);
                 }
                 catch (IOException e)
                 {
                     respondError(packet, ErrorCodes.IOError, e.getMessage());
-                    log("Error: file at " + path + " is not read from " + offset + " to " + offset + length, 12);
+                    log("Error: file at " + path + " is not read from " + offset + " to " + (offset + length), 12);
                 }
                 break;
             }
@@ -550,9 +550,8 @@ class FileServerThread extends Thread
     // Inserts a certain number of bytes into a file
     // This requires creating a new file and deleting an old
     // due to the difficulty of inserting bytes at a random location in a file
-    public void insertFile(String pathname, int offset, byte[] data) throws IOException
+    public void insertFile(String pathname, int offsetx, byte[] data) throws IOException
     {
-
         String randomName = Double.toHexString(Math.random());
 
         File origFile = new File(pathname);
@@ -561,6 +560,7 @@ class FileServerThread extends Thread
         BufferedInputStream bi = new BufferedInputStream(new FileInputStream(origFile));
         BufferedOutputStream bo = new BufferedOutputStream(new FileOutputStream(tempFile));
 
+        final int offset = (offsetx < 0) ? (int)origFile.length() : offsetx;
 
         for(int pos = 0; pos < offset; pos++)
         {
@@ -577,6 +577,11 @@ class FileServerThread extends Thread
 
         bi.close(); bo.close();
 
+        byte[] newBytes = new byte[(int)tempFile.length()];
+        bi = new BufferedInputStream(new FileInputStream(tempFile));
+        bi.read(newBytes);
+        bi.close();
+
 
         if(!(origFile.delete() && tempFile.renameTo(origFile)))
             throw new IOException("Cannot delete original file or rename temporary file. Possibly due to original file still in use");
@@ -591,7 +596,7 @@ class FileServerThread extends Thread
                 monitoringMap.get(pathname).forEach(target -> {
                     try
                     {
-                        respondCallback(target, pathname, data, offset);
+                        respondCallback(target, pathname, newBytes, offset);
                     }
                     catch (SizeLimitExceededException e)
                     {
