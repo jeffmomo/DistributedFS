@@ -248,7 +248,7 @@ class FileServerThread extends Thread
                 }
                 else
                 {
-                    respondError(packet, ErrorCodes.GENERAL, "Cannot delete file");
+                    respondError(packet, ErrorCodes.GENERAL, "Cannot delete file. It may not exist, or you do not have permission");
                     log("File " + path + " is not deleted", 12);
                 }
 
