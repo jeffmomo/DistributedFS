@@ -101,8 +101,11 @@ public class TestClient
                         // Only normal responses have the sequence numbers embedded
                         String path = (String)um.getNext();
                         System.out.println("Duplicated file path recvd: " + path + " seq num = " + um.getNext());
+
                         // Sends a delete request with the newly gotten file name as the parameter
                         send(new Marshaller((byte) MessageType.DELETE_FILE, path, sequenceNum++).getBytes());
+                        send(new Marshaller((byte) MessageType.DELETE_FILE, path, sequenceNum++).getBytes());
+
                         break;
                     case MessageType.RESPONSE_SUCCESS:
                         System.out.println(um.getNext() + " seq num = " + um.getNext());
