@@ -36,6 +36,8 @@ public class TestClient
         {
             socket = new DatagramSocket();
 
+            // Parameters for SETUP CACHE - CacheTimeout, SequenceNumber
+            send(new Marshaller((byte) MessageType.SERVER_SETUP_CACHE_TIMEOUT, 10000, sequenceNum++).getBytes());
 
             // Parameters for MONITOR_FILE - PathName, IntervalMilliseconds, SequenceNumber
             send(new Marshaller((byte) MessageType.MONITOR_FILE, "test", 10000, sequenceNum++).getBytes());
@@ -103,8 +105,8 @@ public class TestClient
                         System.out.println("Duplicated file path recvd: " + path + " seq num = " + um.getNext());
 
                         // Sends a delete request with the newly gotten file name as the parameter
-                        send(new Marshaller((byte) MessageType.DELETE_FILE, path, sequenceNum++).getBytes());
-                        send(new Marshaller((byte) MessageType.DELETE_FILE, path, sequenceNum++).getBytes());
+                        send(new Marshaller((byte) MessageType.useAtLeastOnce(MessageType.DELETE_FILE), path, sequenceNum).getBytes());
+                        send(new Marshaller((byte) MessageType.useAtLeastOnce(MessageType.DELETE_FILE), path, sequenceNum).getBytes());
 
                         break;
                     case MessageType.RESPONSE_SUCCESS:

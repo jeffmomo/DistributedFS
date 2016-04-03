@@ -39,7 +39,7 @@ class FileServerThread extends Thread
     public static final int DEBUG_MASK = 12;
 
     // An arbitrary timeout period for detecting duplicated messages
-    public static final int MESSAGE_CACHE_TIMEOUT = 20000;
+    public static int MESSAGE_CACHE_TIMEOUT = 20000;
 
     private DatagramSocket _socket;
 
@@ -290,6 +290,17 @@ class FileServerThread extends Thread
                 }
                 break;
             }
+            case MessageType.SERVER_SETUP_CACHE_TIMEOUT:
+            {
+                int timeoutMilli = (int) um.getNext();
+                MESSAGE_CACHE_TIMEOUT = timeoutMilli;
+
+                respond(packet, MessageType.RESPONSE_SUCCESS, "Cache timeout set to " + timeoutMilli, query, (int) um.getNext());
+                log("Cache timeout set to " + timeoutMilli, 4);
+
+                break;
+            }
+
         }
     }
 

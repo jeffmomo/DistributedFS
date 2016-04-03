@@ -19,6 +19,7 @@ public class MessageType
     public static final int RESPONSE_SUCCESS = 9;
     public static final int GET_ATTRIBUTES = 10;
     public static final int RESPONSE_ATTRIBUTES = 11;
+    public static final int SERVER_SETUP_CACHE_TIMEOUT = 32;
 
     public static int useAtLeastOnce(int messageType)
     {
