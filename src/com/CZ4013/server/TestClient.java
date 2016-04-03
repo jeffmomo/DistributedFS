@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.util.Date;
 
 public class TestClient
 {
@@ -42,15 +43,21 @@ public class TestClient
             // Parameters for READ_FILE - PathName, Offset, Length (set this to -1 if you want to read to end), SequenceNumber
             send(new Marshaller((byte) MessageType.READ_FILE, "test", 0, -1, sequenceNum++).getBytes());
 
-            // Parameters for INSERT_FILE - PathName, Offset, Bytes, SequenceNumber
-            // If Offset == -1, then it inserts the bytes at the end of the file
+            // Parameters for GET_ATTRIBUTES - Pathname, SequenceNumber
+            send(new Marshaller((byte) MessageType.GET_ATTRIBUTES, "test", sequenceNum++).getBytes());
+
+            // Parameters for INSERT_FILE - PathName, Offset (Set this to -1 if you want to insert at end), Bytes, SequenceNumber
             send(new Marshaller((byte) MessageType.INSERT_FILE, "test", 1, "b".getBytes(), sequenceNum).getBytes());
+
+            send(new Marshaller((byte) MessageType.GET_ATTRIBUTES, "test", sequenceNum).getBytes());
+
             send(new Marshaller((byte) MessageType.INSERT_FILE, "test", 1, "b".getBytes(), sequenceNum).getBytes());
             send(new Marshaller((byte) MessageType.INSERT_FILE, "test", 1, "b".getBytes(), sequenceNum).getBytes());
 
+            send(new Marshaller((byte) MessageType.GET_ATTRIBUTES, "test", sequenceNum++).getBytes());
 
-            send(new Marshaller((byte) MessageType.AT_LEAST_ONCE_DEMO_INSERT_FILE, "test", -1, "END".getBytes(), -1).getBytes());
-            send(new Marshaller((byte) MessageType.AT_LEAST_ONCE_DEMO_INSERT_FILE, "test", 1, "z".getBytes(), -1).getBytes());
+            send(new Marshaller((byte) MessageType.useAtLeastOnce(MessageType.INSERT_FILE), "test", -1, "END".getBytes(), -1).getBytes());
+            send(new Marshaller((byte) MessageType.useAtLeastOnce(MessageType.INSERT_FILE), "test", 1, "z".getBytes(), -1).getBytes());
 
 
             send(new Marshaller((byte) MessageType.READ_FILE, "test", 0, -1, sequenceNum++).getBytes());
@@ -99,6 +106,9 @@ public class TestClient
                         break;
                     case MessageType.RESPONSE_SUCCESS:
                         System.out.println(um.getNext() + " seq num = " + um.getNext());
+                        break;
+                    case MessageType.RESPONSE_ATTRIBUTES:
+                        System.out.println("Last modification at: " + new Date(Long.parseLong((String) um.getNext())).toLocaleString());
                         break;
                     default:
                         System.err.println("Strange request received" + um.getNext());

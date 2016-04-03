@@ -273,6 +273,23 @@ class FileServerThread extends Thread
                 }
                 break;
             }
+            case MessageType.GET_ATTRIBUTES:
+            {
+                String path = (String) um.getNext();
+
+                try
+                {
+                    String lastModded = getLastModified(path);
+                    respond(packet, MessageType.RESPONSE_ATTRIBUTES, lastModded, query, (int) um.getNext());
+                    log("File " + path + " was last modified at " + new Date(Long.parseLong(lastModded)).toLocaleString(), 4);
+                }
+                catch (IOException e)
+                {
+                    respondError(packet, ErrorCodes.IOError, e.getMessage());
+                    log("Cannot get Last Modified attribute from file " + path, 12);
+                }
+                break;
+            }
         }
     }
 
@@ -474,6 +491,15 @@ class FileServerThread extends Thread
         log("File " + pathname + " is duplicated as '" + dupFile.getPath() + "'", 1);
 
         return dupFile.getPath();
+    }
+
+    public String getLastModified(String pathname) throws Exception
+    {
+        File f = new File(pathname);
+
+        log("File " + pathname + "was last modified at: " + new Date(f.lastModified()).toLocaleString(), 1);
+
+        return Long.toString(f.lastModified());
     }
 
     // Reads a file at a certain location

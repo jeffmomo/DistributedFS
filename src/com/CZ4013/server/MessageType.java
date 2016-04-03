@@ -17,5 +17,12 @@ public class MessageType
     public static final int CALLBACK = 7;
     public static final int RESPONSE_PATH = 8;
     public static final int RESPONSE_SUCCESS = 9;
+    public static final int GET_ATTRIBUTES = 10;
+    public static final int RESPONSE_ATTRIBUTES = 11;
     public static final int AT_LEAST_ONCE_DEMO_INSERT_FILE = 51;
+
+    public static int useAtLeastOnce(int messageType)
+    {
+        return messageType + 50;
+    }
 }
