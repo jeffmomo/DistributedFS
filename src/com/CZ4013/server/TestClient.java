@@ -43,12 +43,13 @@ public class TestClient
             send(new Marshaller((byte) MessageType.READ_FILE, "test", 0, -1, sequenceNum++).getBytes());
 
             // Parameters for INSERT_FILE - PathName, Offset, Bytes, SequenceNumber
+            // If Offset == -1, then it inserts the bytes at the end of the file
             send(new Marshaller((byte) MessageType.INSERT_FILE, "test", 1, "b".getBytes(), sequenceNum).getBytes());
             send(new Marshaller((byte) MessageType.INSERT_FILE, "test", 1, "b".getBytes(), sequenceNum).getBytes());
             send(new Marshaller((byte) MessageType.INSERT_FILE, "test", 1, "b".getBytes(), sequenceNum).getBytes());
 
 
-            send(new Marshaller((byte) MessageType.AT_LEAST_ONCE_DEMO_INSERT_FILE, "test", 1, "z".getBytes(), -1).getBytes());
+            send(new Marshaller((byte) MessageType.AT_LEAST_ONCE_DEMO_INSERT_FILE, "test", -1, "END".getBytes(), -1).getBytes());
             send(new Marshaller((byte) MessageType.AT_LEAST_ONCE_DEMO_INSERT_FILE, "test", 1, "z".getBytes(), -1).getBytes());
 
 
@@ -84,7 +85,7 @@ public class TestClient
                         System.out.println("Bytes received - length: " + ((byte[])um.getNext()).length + " seq num = " + um.getNext());
                         break;
                     case MessageType.CALLBACK:
-                        System.out.println("Callback received for " + um.getNext() + " - update length: " + ((byte[]) um.getNext()).length);
+                        System.out.println("Callback received for " + um.getNext() + " - updated file: " + new String((byte[]) um.getNext()));
                         break;
                     case MessageType.ERROR:
                         System.err.println("Error occured - code " + (int) um.getNext() + ": " + um.getNext());
