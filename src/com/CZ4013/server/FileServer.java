@@ -183,9 +183,9 @@ class FileServerThread extends Thread
                     respond(packet, MessageType.RESPONSE_BYTES, content, query, (int) um.getNext());
                     log("File at " + path + " is read from " + offset + " to " + (offset + length), 4);
                 }
-                catch (IOException e)
+                catch (Exception e)
                 {
-                    respondError(packet, ErrorCodes.IOError, e.getMessage());
+                    respondError(packet, ErrorCodes.IOError, "Error reading file " + e.getMessage());
                     log("Error: file at " + path + " is not read from " + offset + " to " + (offset + length), 12);
                 }
                 break;
@@ -204,9 +204,9 @@ class FileServerThread extends Thread
                     respond(packet, MessageType.RESPONSE_SUCCESS, "Success: Bytes inserted", query, (int) um.getNext());
                     log("file at " + path + " had " + bytes.length + " bytes inserted at " + offset, 4);
                 }
-                catch(IOException e)
+                catch(Exception e)
                 {
-                    respondError(packet, ErrorCodes.IOError, e.getMessage());
+                    respondError(packet, ErrorCodes.IOError, "Error inserting file: " +  e.getMessage());
                     log("Error: file at " + path + " had " + bytes.length + " bytes not inserted at " + offset, 12);
                 }
                 break;
@@ -227,7 +227,7 @@ class FileServerThread extends Thread
                 else
                 {
                     respondError(packet, ErrorCodes.NotFound, "File does not exist");
-                    log("File " + path + " is not monitored", 12);
+                    log("Error: File " + path + " is not monitored", 12);
                 }
 
 
@@ -249,7 +249,7 @@ class FileServerThread extends Thread
                 else
                 {
                     respondError(packet, ErrorCodes.GENERAL, "Cannot delete file. It may not exist, or you do not have permission");
-                    log("File " + path + " is not deleted", 12);
+                    log("Error: File " + path + " is not deleted", 12);
                 }
 
                 break;
@@ -266,10 +266,10 @@ class FileServerThread extends Thread
                     respond(packet, MessageType.RESPONSE_PATH, filename, query, (int) um.getNext());
                     log("File " + path + " is duplicated as " + filename, 4);
                 }
-                catch (IOException e)
+                catch (Exception e)
                 {
-                    respondError(packet, ErrorCodes.IOError, e.getMessage());
-                    log("File " + path + " is not duplicated", 12);
+                    respondError(packet, ErrorCodes.IOError, "Error duplicating file: " + e.getMessage());
+                    log("Error: File " + path + " is not duplicated", 12);
                 }
                 break;
             }
@@ -283,10 +283,10 @@ class FileServerThread extends Thread
                     respond(packet, MessageType.RESPONSE_ATTRIBUTES, lastModded, query, (int) um.getNext());
                     log("File " + path + " was last modified at " + new Date(Long.parseLong(lastModded)).toLocaleString(), 4);
                 }
-                catch (IOException e)
+                catch (Exception e)
                 {
-                    respondError(packet, ErrorCodes.IOError, e.getMessage());
-                    log("Cannot get Last Modified attribute from file " + path, 12);
+                    respondError(packet, ErrorCodes.IOError, "Error getting attributes: " +  e.getMessage());
+                    log("Error: Cannot get Last Modified attribute from file " + path, 12);
                 }
                 break;
             }
@@ -517,13 +517,24 @@ class FileServerThread extends Thread
     public byte[] readFile(String pathname, int offset, int length) throws IOException
     {
         if(length == -1)
-            length = (int) new File(pathname).length();
+        {
+            length = (int) (new File(pathname).length() - offset);
+        }
 
         byte[] buffer = new byte[length];
 
-        BufferedInputStream inputStream = new BufferedInputStream(new FileInputStream(pathname));
-        inputStream.read(buffer, offset, length);
-        inputStream.close();
+        try (BufferedInputStream inputStream = new BufferedInputStream(new FileInputStream(pathname)))
+        {
+            inputStream.skip(offset);
+            inputStream.read(buffer, 0, length);
+        }
+        catch (IndexOutOfBoundsException e)
+        {
+            throw new IOException("Offset or length is inappropriate");
+        } catch (IOException e)
+        {
+            throw e;
+        }
 
         log("File " + pathname + " has been read", 1);
 
@@ -587,7 +598,7 @@ class FileServerThread extends Thread
     // Inserts a certain number of bytes into a file
     // This requires creating a new file and deleting an old
     // due to the difficulty of inserting bytes at a random location in a file
-    public void insertFile(String pathname, int offsetx, byte[] data) throws IOException
+    public void insertFile(String pathname, int offsetx, byte[] data) throws Exception
     {
         String randomName = Double.toHexString(Math.random());
 
@@ -657,6 +668,11 @@ class FileServerThread extends Thread
 
         String logStr = "[" + new SimpleDateFormat("HH:mm:ss.SSS").format(d) + "] ";
         if((mask & DEBUG_MASK) > 0)
-            System.out.println(logStr + content);
+        {
+            if(logStr.contains("Error"))
+                System.err.println(logStr + content);
+            else
+                System.out.println(logStr + content);
+        }
     }
 }

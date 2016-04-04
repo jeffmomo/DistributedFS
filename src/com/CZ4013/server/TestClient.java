@@ -26,7 +26,7 @@ public class TestClient
         // This should be made customisable
         InetAddress address = InetAddress.getByName("127.0.0.1");
         DatagramPacket packet = new DatagramPacket(buf, buf.length,
-                address, 4445);
+                address, 2222);
         socket.send(packet);
     }
 
@@ -44,6 +44,8 @@ public class TestClient
 
             // Parameters for READ_FILE - PathName, Offset, Length (set this to -1 if you want to read to end), SequenceNumber
             send(new Marshaller((byte) MessageType.READ_FILE, "test", 0, -1, sequenceNum++).getBytes());
+            send(new Marshaller((byte) MessageType.READ_FILE, "test", 1, -1, sequenceNum++).getBytes());
+
 
             // Parameters for GET_ATTRIBUTES - Pathname, SequenceNumber
             send(new Marshaller((byte) MessageType.GET_ATTRIBUTES, "test", sequenceNum++).getBytes());
