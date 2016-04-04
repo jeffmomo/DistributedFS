@@ -19,9 +19,9 @@ import java.util.HashSet;
  */
 public class FileServer
 {
-    public FileServer() throws IOException
+    public FileServer(int port) throws IOException
     {
-        new FileServerThread().start();
+        new FileServerThread(port).start();
     }
 }
 
@@ -65,12 +65,12 @@ class FileServerThread extends Thread
 
 
     // Initialises the file server with some arbitrary port
-    public FileServerThread() throws IOException
+    public FileServerThread(int port) throws IOException
     {
         super();
 
-        _socket = new DatagramSocket(4445);
-
+        _socket = new DatagramSocket(port);
+        log("Server started at port " + port, 12);
     }
 
     /**

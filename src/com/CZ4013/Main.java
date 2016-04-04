@@ -30,7 +30,7 @@ public class Main {
         int[] arr = (int[]) um.getNext();
         Object n = um.getNext();
 
-        FileServer fs = new FileServer();
+        FileServer fs = new FileServer(Integer.parseInt(args[0]));
 
 
         // An arbitrary packet used for testing purposes
